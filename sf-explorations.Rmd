@@ -1,0 +1,125 @@
+---
+title: "sf-explorations"
+output: html_document
+date: "2023-02-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("tidyverse")
+library(sf)
+
+library(plotly)
+```
+
+```{r}
+crimeData = read_csv('crimedata_csv_AllNeighbourhoods_AllYears.csv') %>% filter(X != 0, Y != 0) %>% mutate(TYPE = as.factor(TYPE))
+theftData = crimeData %>% filter(TYPE == 'Theft of Bicycle')
+districtData = read_sf("sf-data/local-area-boundary.shp") %>% mutate(geometry = st_transform(geometry,crs = "EPSG:32610" ))
+streetData = read_sf("street-data/public-streets.shp") %>% mutate(geometry = st_transform(geometry,crs = "EPSG:32610" ))
+shorelineData = read_sf("shoreline-data/shoreline-2002.shp") %>%
+  mutate(geometry = st_transform(geometry,crs = "EPSG:32610" )) %>%
+  mutate(geometry = st_cast(geometry,"POLYGON"))
+cityOutline = streetData %>% mutate(geometry = st_cast(geometry,"POLYGON"))
+orthophotoData = read_sf("orthophoto-data/orthophoto-imagery-2015.shp") %>% mutate(geometry = st_transform(geometry,crs = "EPSG:32610" ))
+```
+
+```{r}
+(ggplot() +
+  theme(panel.background = element_rect(fill='lightblue')) +
+  geom_sf(data = shorelineData,fill='grey') +
+  geom_sf(data = streetData,aes(text=hblock)) +
+  geom_point(data = crimeData %>% filter(TYPE == 'Theft of Bicycle'), aes(x=X,y=Y,alpha=0.1), color='red')) %>%
+  ggplotly(tooltip='text')
+```
+```{r}
+cityOutline %>% ggplot() +
+  geom_sf()
+```
+
+```{r}
+(orthophotoData %>% ggplot() +
+  geom_sf()) %>% ggplotly()
+```
+
+```{r}
+library(lubridate)
+theftData = crimeData %>% filter(TYPE == 'Theft of Bicycle') %>% mutate(DATE=make_datetime(YEAR,MONTH,DAY))
+theftData %>% write_csv('bicycle_thefts.csv')
+```
+```{r}
+theftData %>% group_by(YEAR) %>% count()
+```
+```{r}
+bottom_right = c(attr(shorelineData$geometry,'bbox')$xmax, attr(shorelineData$geometry,'bbox')$ymin)
+
+spatial_shoreline = shorelineData$geometry[2] %>% as('Spatial')
+spatial_shoreline$polygons
+```
+
+```{r}
+shorelineData %>% mutate(
+  xmax = apply(geometryfunction(x){attr(x,'bbox')$xmax})
+)
+```
+```{r}
+test = read_sf("shoreline-data/shoreline-2002.shp") %>%
+  mutate(geometry = st_transform(geometry,crs = "EPSG:32610" ))
+attributes(test$geometry[2])
+```
+
+```{r}
+shorelineData[2,] %>% ggplot() + geom_sf()
+```
+```{r}
+poly <- Poly_Coord_df %>% 
+  st_as_sf(coords = c("lon", "lat"), 
+           crs = 32611) %>% 
+  st_bbox() %>% 
+  st_as_sfc()
+```
+```{r}
+
+slot(spatial_shoreline, "coords")
+points(spatial_shoreline)
+```
+
+```{r}
+sfls = read_sf("shoreline-data/shoreline-2002.shp") %>%
+  mutate(geometry = st_transform(geometry,crs = "EPSG:32610" ))
+
+sfpts <- st_geometry(sfls$geometry[2]) %>% 
+  lapply(., function(x) {
+    st_sfc(x) %>% 
+      st_cast(., 'POINT')})
+
+for( p in sfpts)
+  print(p)
+
+
+```
+```{r}
+#read data
+shorelineData = read_sf("shoreline-data/shoreline-2002.shp") %>%
+  mutate(geometry = st_transform(geometry,crs = "EPSG:32610" )) 
+
+#get coords
+coords = st_coordinates(shorelineData$geometry[1])
+
+#get eastern most coord
+rightmost_index = which.max(coords[,1])
+rightmost_point = coords[rightmost_index,]
+
+#add new point
+shorelinePoints = shorelineData$geometry[2]
+new_point = rightmost_point
+new_points = st_coordinates(shorelinePoints) %>% rbind(rightmost_point)
+
+#create new linestring from new points and replace old one in geometry
+new_linestring = st_linestring(new_points[,c("X","Y")]) 
+shorelineData$geometry[2] = new_linestring
+shorelineData = shorelineData %>% mutate(geometry=geometry %>% st_cast('POLYGON'))
+
+plot(shorelineData)
+```
+
